@@ -24,10 +24,9 @@ for d in [DATA_DIR, UPLOADS_DIR, TRANSCRIPTS_DIR, SUMMARIES_DIR]:
 class Settings(BaseSettings):
     """App settings — loaded from settings.json, editable via UI."""
 
-    # Whisper
-    whisper_model: str = "large-v3"
-    whisper_device: str = "auto"  # auto, cpu, cuda
-    whisper_language: str = "auto"  # auto-detect or zh/en
+    # VibeVoice-ASR (Microsoft) — 語音轉文字 + 說話者辨識 + 時間戳
+    # 模型清單：https://huggingface.co/microsoft/VibeVoice-ASR
+    vibevoice_model: str = "microsoft/VibeVoice-ASR"  # 7B 完整模型
 
     # LLM provider
     llm_provider: str = "openai"  # openai | anthropic | gemini
@@ -37,9 +36,6 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-sonnet-4-20250514"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-pro"
-
-    # HuggingFace token (required for pyannote speaker diarization)
-    hf_token: str = ""
 
     # Google Drive — path supports nested folders with /
     gdrive_folder_name: str = "Temp/MeetingMinute"

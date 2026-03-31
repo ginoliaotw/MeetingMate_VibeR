@@ -1,4 +1,10 @@
-"""MeetingMate — FastAPI backend server (with WhisperX + speaker diarization).
+"""MeetingMate — FastAPI backend server (with VibeVoice-ASR speaker diarization).
+
+Transcription core: Microsoft VibeVoice-ASR (7B)
+  https://github.com/microsoft/VibeVoice
+  - 60-minute single-pass processing
+  - Unified ASR + Speaker Diarization + Timestamps (Who/When/What)
+  - 50+ languages, fully offline
 
 Endpoints:
   POST   /api/meetings/upload                Upload audio & create meeting record
@@ -6,7 +12,7 @@ Endpoints:
   GET    /api/meetings/{id}                   Get meeting detail
   DELETE /api/meetings/{id}                   Delete a meeting
   PUT    /api/meetings/{id}                   Update meeting title/date/participants
-  POST   /api/meetings/{id}/transcribe        Start transcription (WhisperX + diarization)
+  POST   /api/meetings/{id}/transcribe        Start transcription (VibeVoice-ASR)
   GET    /api/meetings/{id}/transcribe/progress  Get transcription progress (poll)
   POST   /api/meetings/{id}/transcribe/pause     Pause transcription
   POST   /api/meetings/{id}/transcribe/resume    Resume transcription
@@ -39,7 +45,7 @@ from config import (
     load_settings, save_settings, Settings,
     UPLOADS_DIR, TRANSCRIPTS_DIR, SUMMARIES_DIR,
 )
-from whisper_engine import (
+from vibevoice_engine import (
     get_job_progress, pause_job, resume_job, cancel_job, cleanup_job,
 )
 
@@ -195,10 +201,10 @@ def delete_meeting(meeting_id: int, db: Session = Depends(get_db)):
 
 # ---------- Transcription ----------
 
-def _do_transcribe(meeting_id: int):
-    """Background task: run WhisperX transcription with speaker diarization."""
+def _do_transcribe(meeting_id: int, hotwords: str = ""):
+    """Background task: run VibeVoice-ASR transcription with speaker diarization."""
     from database import SessionLocal
-    from whisper_engine import transcribe
+    from vibevoice_engine import transcribe
 
     db = SessionLocal()
     try:
@@ -209,8 +215,12 @@ def _do_transcribe(meeting_id: int):
         m.status = "transcribing"
         db.commit()
 
-        # Pass meeting_id so whisper_engine tracks progress/pause/cancel
-        result = transcribe(m.audio_path, meeting_id=meeting_id)
+        # VibeVoice-ASR: unified ASR + diarization + timestamps in one pass
+        result = transcribe(
+            m.audio_path,
+            meeting_id=meeting_id,
+            hotwords=hotwords or m.participants or "",
+        )
         transcript_text = result["text"]
         language = result["language"]
         speakers = result.get("speakers", [])
@@ -261,8 +271,18 @@ def _do_transcribe(meeting_id: int):
 
 
 @app.post("/api/meetings/{meeting_id}/transcribe")
-def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    """Start transcription of a meeting's audio."""
+def transcribe_meeting(
+    meeting_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    hotwords: Optional[str] = None,
+):
+    """Start transcription with VibeVoice-ASR (ASR + diarization + timestamps).
+
+    Optional query param:
+      hotwords: 自訂詞彙，以逗號分隔（人名、術語等），提升辨識精準度
+                例：hotwords=張三,李四,MeetingMate
+    """
     m = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not m:
         raise HTTPException(404, "Meeting not found")
@@ -272,8 +292,8 @@ def transcribe_meeting(meeting_id: int, background_tasks: BackgroundTasks, db: S
     m.status = "transcribing"
     db.commit()
 
-    background_tasks.add_task(_do_transcribe, meeting_id)
-    return {"status": "transcribing", "message": "Transcription started in background"}
+    background_tasks.add_task(_do_transcribe, meeting_id, hotwords or "")
+    return {"status": "transcribing", "message": "VibeVoice-ASR transcription started"}
 
 
 @app.get("/api/meetings/{meeting_id}/transcribe/progress")
@@ -502,7 +522,7 @@ def get_settings():
     s = load_settings()
     d = s.model_dump()
     # Mask API keys for security
-    for key in ["openai_api_key", "anthropic_api_key", "gemini_api_key", "hf_token"]:
+    for key in ["openai_api_key", "anthropic_api_key", "gemini_api_key"]:
         if d.get(key):
             d[key] = d[key][:8] + "..." + d[key][-4:] if len(d[key]) > 12 else "***"
     return d
