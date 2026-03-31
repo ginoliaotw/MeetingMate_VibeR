@@ -11,9 +11,8 @@ pydantic-settings==2.5.2
 # 安裝方式：pip install git+https://github.com/microsoft/VibeVoice.git
 vibevoice @ git+https://github.com/microsoft/VibeVoice.git
 
-# VibeVoice 依賴
+# VibeVoice 依賴（transformers 版本由 vibevoice 自身決定，勿另行指定）
 torch>=2.1.0
-transformers>=5.3.0
 accelerate>=0.26.0
 
 # Audio processing
