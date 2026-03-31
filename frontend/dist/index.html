@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MeetingMate — 離線會議記錄翻譯</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.9/babel.min.js"></script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f172a; --bg2: #1e293b; --bg3: #334155;
+      --text: #f1f5f9; --text2: #94a3b8; --text3: #64748b;
+      --accent: #3b82f6; --accent2: #2563eb; --green: #22c55e;
+      --red: #ef4444; --orange: #f59e0b; --purple: #a855f7;
+      --border: #334155; --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .app { display: flex; min-height: 100vh; }
+
+    /* Sidebar */
+    .sidebar { width: 280px; background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+    .sidebar-header { padding: 24px 20px; border-bottom: 1px solid var(--border); }
+    .sidebar-header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .sidebar-header h1 i { color: var(--accent); }
+    .sidebar-nav { flex: 1; padding: 12px; overflow-y: auto; }
+    .nav-btn { width: 100%; padding: 12px 16px; background: none; border: none; color: var(--text2); cursor: pointer; border-radius: 8px; text-align: left; font-size: 14px; display: flex; align-items: center; gap: 10px; transition: all 0.2s; margin-bottom: 4px; }
+    .nav-btn:hover { background: var(--bg3); color: var(--text); }
+    .nav-btn.active { background: var(--accent); color: white; }
+    .nav-btn i { width: 20px; text-align: center; }
+
+    /* Main content */
+    .main { flex: 1; margin-left: 280px; padding: 32px; max-width: 960px; }
+    .page-title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+    .page-subtitle { color: var(--text2); margin-bottom: 32px; }
+
+    /* Cards */
+    .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 20px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .card-title { font-size: 16px; font-weight: 600; }
+
+    /* Upload area */
+    .upload-zone { border: 2px dashed var(--border); border-radius: var(--radius); padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.3s; }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+    .upload-zone i { font-size: 48px; color: var(--accent); margin-bottom: 16px; }
+    .upload-zone p { color: var(--text2); margin-top: 8px; font-size: 14px; }
+
+    /* Buttons */
+    .btn { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; transition: all 0.2s; }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent2); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-secondary { background: var(--bg3); color: var(--text); }
+    .btn-secondary:hover { background: #475569; }
+    .btn-success { background: var(--green); color: white; }
+    .btn-danger { background: var(--red); color: white; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+
+    /* Status badges */
+    .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+    .badge-uploaded { background: rgba(59,130,246,0.15); color: #60a5fa; }
+    .badge-transcribing, .badge-summarizing { background: rgba(245,158,11,0.15); color: #fbbf24; }
+    .badge-transcribed { background: rgba(168,85,247,0.15); color: #c084fc; }
+    .badge-completed { background: rgba(34,197,94,0.15); color: #4ade80; }
+    .badge-error { background: rgba(239,68,68,0.15); color: #f87171; }
+
+    /* Meeting list */
+    .meeting-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 10px; cursor: pointer; transition: all 0.2s; }
+    .meeting-item:hover { border-color: var(--accent); background: rgba(59,130,246,0.03); }
+    .meeting-info { flex: 1; }
+    .meeting-title { font-weight: 600; margin-bottom: 4px; }
+    .meeting-meta { color: var(--text3); font-size: 13px; display: flex; gap: 16px; }
+    .meeting-actions { display: flex; gap: 8px; align-items: center; }
+
+    /* Detail page */
+    .detail-section { margin-bottom: 24px; }
+    .detail-section h3 { font-size: 15px; font-weight: 600; margin-bottom: 12px; color: var(--text2); display: flex; align-items: center; gap: 8px; }
+    .transcript-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; font-size: 14px; line-height: 1.8; }
+    .speaker-label { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 600; margin: 8px 0 4px 0; }
+    .speaker-0 { background: rgba(59,130,246,0.2); color: #60a5fa; }
+    .speaker-1 { background: rgba(168,85,247,0.2); color: #c084fc; }
+    .speaker-2 { background: rgba(34,197,94,0.2); color: #4ade80; }
+    .speaker-3 { background: rgba(245,158,11,0.2); color: #fbbf24; }
+    .speaker-4 { background: rgba(239,68,68,0.2); color: #f87171; }
+    .speaker-5 { background: rgba(236,72,153,0.2); color: #f472b6; }
+    .speaker-legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+    .speaker-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text2); }
+    .summary-box { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 20px; font-size: 14px; line-height: 1.8; }
+    .action-items { list-style: none; padding: 0; }
+    .action-items li { padding: 8px 12px; margin-bottom: 6px; background: var(--bg); border-radius: 6px; border-left: 3px solid var(--accent); font-size: 14px; }
+
+    /* Settings */
+    .form-group { margin-bottom: 20px; }
+    .form-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--text2); }
+    .form-input, .form-select { width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; outline: none; transition: border 0.2s; }
+    .form-input:focus, .form-select:focus { border-color: var(--accent); }
+    .form-select { cursor: pointer; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .form-hint { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+    /* Provider selector */
+    .provider-selector { display: flex; gap: 10px; margin-bottom: 20px; }
+    .provider-card { flex: 1; padding: 16px; border: 2px solid var(--border); border-radius: 10px; cursor: pointer; text-align: center; transition: all 0.2s; }
+    .provider-card:hover { border-color: var(--text3); }
+    .provider-card.selected { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+    .provider-card i { font-size: 24px; margin-bottom: 8px; }
+    .provider-card .name { font-weight: 600; font-size: 14px; }
+
+    /* Progress bar */
+    .progress-panel { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-top: 16px; }
+    .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .progress-header .label { font-size: 14px; font-weight: 600; }
+    .progress-header .pct { font-size: 22px; font-weight: 700; color: var(--accent); }
+    .progress-track { height: 8px; background: var(--bg3); border-radius: 4px; overflow: hidden; margin-bottom: 12px; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); border-radius: 4px; transition: width 0.4s ease; }
+    .progress-fill.paused { background: linear-gradient(90deg, var(--orange), #d97706); }
+    .progress-stats { display: flex; gap: 20px; color: var(--text3); font-size: 13px; }
+    .progress-stats span { display: flex; align-items: center; gap: 6px; }
+    .progress-controls { display: flex; gap: 8px; margin-top: 14px; }
+    .btn-warning { background: var(--orange); color: white; }
+    .btn-warning:hover { background: #d97706; }
+
+    /* Loading spinner */
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.6s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner-lg { width: 32px; height: 32px; border-width: 3px; }
+
+    /* Toast notification */
+    .toast { position: fixed; bottom: 24px; right: 24px; padding: 14px 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; font-size: 14px; z-index: 100; display: flex; align-items: center; gap: 10px; animation: slideUp 0.3s ease; box-shadow: 0 8px 32px rgba(0,0,0,0.4); }
+    .toast-success { border-color: var(--green); }
+    .toast-error { border-color: var(--red); }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .sidebar { width: 60px; }
+      .sidebar-header h1 span, .nav-btn span { display: none; }
+      .main { margin-left: 60px; padding: 20px; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+    const API = 'http://localhost:8000/api';
+
+    // ─── Toast ─────────────────────────────────────────
+    function Toast({ message, type, onClose }) {
+      useEffect(() => { const t = setTimeout(onClose, 3500); return () => clearTimeout(t); }, []);
+      return (
+        <div className={`toast toast-${type}`}>
+          <i className={`fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}`}
+             style={{ color: type === 'success' ? 'var(--green)' : 'var(--red)' }} />
+          {message}
+        </div>
+      );
+    }
+
+    // ─── Upload Page ───────────────────────────────────
+    function UploadPage({ onUpload, toast }) {
+      const [dragover, setDragover] = useState(false);
+      const [title, setTitle] = useState('');
+      const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+      const [participants, setParticipants] = useState('');
+      const [uploading, setUploading] = useState(false);
+      const fileRef = useRef();
+
+      const handleFiles = async (files) => {
+        if (!files || files.length === 0) return;
+        const file = files[0];
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('title', title || file.name);
+        fd.append('date', date);
+        fd.append('participants', participants);
+
+        setUploading(true);
+        try {
+          const res = await fetch(`${API}/meetings/upload`, { method: 'POST', body: fd });
+          if (!res.ok) throw new Error((await res.json()).detail || 'Upload failed');
+          const data = await res.json();
+          toast('音檔上傳成功！', 'success');
+          onUpload(data.id);
+        } catch (e) {
+          toast(e.message, 'error');
+        } finally {
+          setUploading(false);
+        }
+      };
+
+      return (
+        <div>
+          <h2 className="page-title">上傳音檔</h2>
+          <p className="page-subtitle">支援 WAV, MP3, M4A, CAF, AAC, OGG, FLAC 格式（含 iPhone/Mac 語音備忘錄）</p>
+
+          <div className="card">
+            <div className="form-row" style={{ marginBottom: 20 }}>
+              <div className="form-group">
+                <label className="form-label">會議標題</label>
+                <input className="form-input" placeholder="例：產品週會" value={title} onChange={e => setTitle(e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">會議日期</label>
+                <input className="form-input" type="date" value={date} onChange={e => setDate(e.target.value)} />
+              </div>
+            </div>
+            <div className="form-group" style={{ marginBottom: 24 }}>
+              <label className="form-label">參與者（逗號分隔）</label>
+              <input className="form-input" placeholder="例：Alice, Bob, Charlie" value={participants} onChange={e => setParticipants(e.target.value)} />
+            </div>
+
+            <div
+              className={`upload-zone ${dragover ? 'dragover' : ''}`}
+              onDragOver={e => { e.preventDefault(); setDragover(true); }}
+              onDragLeave={() => setDragover(false)}
+              onDrop={e => { e.preventDefault(); setDragover(false); handleFiles(e.dataTransfer.files); }}
+              onClick={() => fileRef.current?.click()}
+            >
+              {uploading
+                ? <><div className="spinner spinner-lg" /><p>上傳中...</p></>
+                : <><i className="fas fa-cloud-upload-alt" /><p><strong>點擊或拖放音檔至此</strong></p><p>支援 wav / mp3 / m4a / caf / aac / ogg / flac</p></>
+              }
+            </div>
+            <input ref={fileRef} type="file" accept=".wav,.mp3,.m4a,.caf,.aac,.ogg,.flac,.webm" hidden onChange={e => handleFiles(e.target.files)} />
+          </div>
+        </div>
+      );
+    }
+
+    // ─── Meetings List ─────────────────────────────────
+    function MeetingsPage({ onSelect, toast }) {
+      const [meetings, setMeetings] = useState([]);
+      const [loading, setLoading] = useState(true);
+
+      const load = async () => {
+        try {
+          const res = await fetch(`${API}/meetings`);
+          setMeetings(await res.json());
+        } catch (e) { toast('無法載入會議列表', 'error'); }
+        setLoading(false);
+      };
+      useEffect(() => { load(); const iv = setInterval(load, 5000); return () => clearInterval(iv); }, []);
+
+      const statusLabel = { uploaded: '已上傳', transcribing: '轉錄中...', transcribed: '已轉錄', summarizing: '摘要中...', completed: '已完成', error: '錯誤' };
+
+      const handleDelete = async (e, id) => {
+        e.stopPropagation();
+        if (!confirm('確定要刪除這個會議記錄？')) return;
+        await fetch(`${API}/meetings/${id}`, { method: 'DELETE' });
+        toast('已刪除', 'success');
+        load();
+      };
+
+      return (
+        <div>
+          <h2 className="page-title">會議記錄</h2>
+          <p className="page-subtitle">所有會議記錄一覽</p>
+          {loading ? <div style={{ textAlign: 'center', padding: 40 }}><div className="spinner spinner-lg" /></div>
+           : meetings.length === 0 ? <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text3)' }}><i className="fas fa-inbox" style={{ fontSize: 48, marginBottom: 12 }} /><p>尚無會議記錄，請先上傳音檔</p></div>
+           : meetings.map(m => (
+            <div key={m.id} className="meeting-item" onClick={() => onSelect(m.id)}>
+              <div className="meeting-info">
+                <div className="meeting-title">{m.title}</div>
+                <div className="meeting-meta">
+                  <span><i className="fas fa-calendar" /> {m.date}</span>
+                  <span><i className="fas fa-clock" /> {m.audio_duration_sec ? `${Math.floor(m.audio_duration_sec / 60)}:${String(Math.floor(m.audio_duration_sec % 60)).padStart(2, '0')}` : '-'}</span>
+                  {m.participants && <span><i className="fas fa-users" /> {m.participants}</span>}
+                </div>
+              </div>
+              <div className="meeting-actions">
+                <span className={`badge badge-${m.status}`}>{statusLabel[m.status] || m.status}</span>
+                {m.gdrive_synced && <i className="fab fa-google-drive" style={{ color: 'var(--green)', fontSize: 16 }} title="已同步至 Google Drive" />}
+                <button className="btn btn-danger btn-sm" onClick={e => handleDelete(e, m.id)}><i className="fas fa-trash" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    // ─── Transcription Progress Panel ─────────────────
+    function TranscribeProgress({ meetingId, toast }) {
+      const [prog, setProg] = useState(null);
+      const intervalRef = useRef(null);
+
+      useEffect(() => {
+        const poll = async () => {
+          try {
+            const res = await fetch(`${API}/meetings/${meetingId}/transcribe/progress`);
+            const data = await res.json();
+            setProg(data);
+            // Stop polling when done
+            if (['completed', 'cancelled', 'error', 'idle'].includes(data.status) && data.progress >= 100) {
+              clearInterval(intervalRef.current);
+            }
+          } catch (e) { /* ignore */ }
+        };
+        poll();
+        intervalRef.current = setInterval(poll, 800);
+        return () => clearInterval(intervalRef.current);
+      }, [meetingId]);
+
+      const handlePause = async () => {
+        await fetch(`${API}/meetings/${meetingId}/transcribe/pause`, { method: 'POST' });
+        toast('轉錄已暫停', 'success');
+      };
+      const handleResume = async () => {
+        await fetch(`${API}/meetings/${meetingId}/transcribe/resume`, { method: 'POST' });
+        toast('轉錄已繼續', 'success');
+      };
+      const handleCancel = async () => {
+        if (!confirm('確定要終止轉錄？已完成的部分將不會保留。')) return;
+        await fetch(`${API}/meetings/${meetingId}/transcribe/cancel`, { method: 'POST' });
+        toast('轉錄已終止', 'success');
+      };
+
+      if (!prog) return null;
+
+      const isPaused = prog.status === 'paused';
+      const isActive = ['transcribing', 'paused', 'loading_model', 'aligning', 'diarizing'].includes(prog.status);
+      if (!isActive && prog.progress < 1) return null;
+
+      const fmtTime = (sec) => {
+        if (sec < 0) return '--:--';
+        const m = Math.floor(sec / 60);
+        const s = Math.floor(sec % 60);
+        return `${m}:${String(s).padStart(2, '0')}`;
+      };
+
+      const statusText = prog.status === 'loading_model' ? '載入模型中...'
+        : prog.status === 'aligning' ? '對齊時間戳中...'
+        : prog.status === 'diarizing' ? '辨識說話者中...'
+        : isPaused ? '已暫停'
+        : prog.progress >= 99.9 ? '完成中...'
+        : '轉錄中';
+
+      return (
+        <div className="progress-panel">
+          <div className="progress-header">
+            <span className="label">
+              {isPaused ? <><i className="fas fa-pause-circle" style={{ color: 'var(--orange)' }} /> {statusText}</>
+               : <><span className="spinner" style={{ marginRight: 8 }} /> {statusText}</>}
+            </span>
+            <span className="pct">{prog.progress.toFixed(1)}%</span>
+          </div>
+          <div className="progress-track">
+            <div className={`progress-fill ${isPaused ? 'paused' : ''}`} style={{ width: `${Math.min(prog.progress, 100)}%` }} />
+          </div>
+          <div className="progress-stats">
+            <span><i className="fas fa-clock" /> 已耗時 {fmtTime(prog.elapsed_sec)}</span>
+            <span><i className="fas fa-hourglass-half" /> 預估剩餘 {fmtTime(prog.eta_seconds)}</span>
+            <span><i className="fas fa-list-ol" /> {prog.segments_done} 段</span>
+            <span><i className="fas fa-wave-square" /> {fmtTime(prog.current_time_sec)} / {fmtTime(prog.total_duration_sec)}</span>
+          </div>
+          {isActive && (
+            <div className="progress-controls">
+              {isPaused ? (
+                <button className="btn btn-primary btn-sm" onClick={handleResume}>
+                  <i className="fas fa-play" /> 繼續轉錄
+                </button>
+              ) : (
+                <button className="btn btn-warning btn-sm" onClick={handlePause}>
+                  <i className="fas fa-pause" /> 暫停
+                </button>
+              )}
+              <button className="btn btn-danger btn-sm" onClick={handleCancel}>
+                <i className="fas fa-stop" /> 終止轉錄
+              </button>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── Default LLM Prompt ──────────────────────────────
+    const DEFAULT_PROMPT = `你是一位專業的會議記錄助理。請根據以下「會議逐字稿」，產生一份結構化的會議摘要。
+
+請使用繁體中文輸出，包含以下三個部分：
+
+【一、會議基本資訊與摘要】
+- 會議日期：（若逐字稿中有提及，請填入；否則留空）
+- 會議主旨：（一句話概述會議主題）
+- 參與者：（若逐字稿中有提及，請列出；否則留空）
+- 摘要描述：（200字以內，概述會議重點與結論）
+
+【二、會議詳細摘要】
+請以 Markdown 格式，依主題或議程分段整理會議的詳細討論內容，包含各方觀點、決議與重要數據。
+
+【三、待辦事項】
+請列出會議中提到的所有待辦事項（Action Items），格式如下：
+- [ ] 待辦事項內容（負責人：XXX，期限：XXX）
+
+---
+以下是會議逐字稿：
+`;
+
+    // ─── Meeting Detail ────────────────────────────────
+    function DetailPage({ meetingId, toast, goBack }) {
+      const [m, setM] = useState(null);
+      const [loading, setLoading] = useState(true);
+      const [provider, setProvider] = useState('');
+      const [busy, setBusy] = useState('');
+      const [prompt, setPrompt] = useState(DEFAULT_PROMPT);
+      const [copied, setCopied] = useState(false);
+      const [showExtPaste, setShowExtPaste] = useState(false);
+      const [extSummary, setExtSummary] = useState('');
+      const [savingExt, setSavingExt] = useState(false);
+      const [editingTitle, setEditingTitle] = useState(false);
+      const [titleDraft, setTitleDraft] = useState('');
+
+      const load = async () => {
+        try {
+          const res = await fetch(`${API}/meetings/${meetingId}`);
+          const data = await res.json();
+          setM(data);
+          if (data.external_summary && !extSummary) {
+            setExtSummary(data.external_summary);
+            setShowExtPaste(true);
+          }
+          if (!provider) {
+            const sRes = await fetch(`${API}/settings`);
+            const s = await sRes.json();
+            setProvider(data.summary_llm_provider || s.llm_provider);
+          }
+        } catch (e) { toast('無法載入', 'error'); }
+        setLoading(false);
+      };
+      useEffect(() => { load(); const iv = setInterval(load, 3000); return () => clearInterval(iv); }, [meetingId]);
+
+      // Copy prompt + transcript to clipboard
+      const handleCopyForLLM = async () => {
+        const textToCopy = prompt + '\n' + (m?.transcript_text || '');
+        try {
+          await navigator.clipboard.writeText(textToCopy);
+          setCopied(true);
+          setShowExtPaste(true); // permanently show paste area
+          toast('已複製 Prompt + 逐字稿至剪貼簿！請貼至 ChatGPT / Claude / Gemini', 'success');
+          setTimeout(() => setCopied(false), 3000);
+        } catch (e) {
+          // Fallback
+          const ta = document.createElement('textarea');
+          ta.value = textToCopy;
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+          setCopied(true);
+          setShowExtPaste(true);
+          toast('已複製！', 'success');
+          setTimeout(() => setCopied(false), 3000);
+        }
+      };
+
+      // Save external summary
+      const handleSaveExtSummary = async () => {
+        setSavingExt(true);
+        try {
+          const res = await fetch(`${API}/meetings/${meetingId}/external-summary`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: extSummary }),
+          });
+          if (!res.ok) throw new Error('Failed');
+          toast('外部會議摘要已儲存', 'success');
+          load();
+        } catch (e) { toast('儲存失敗', 'error'); }
+        setSavingExt(false);
+      };
+
+      const act = async (action, extra = '') => {
+        setBusy(action);
+        try {
+          const url = action === 'summarize'
+            ? `${API}/meetings/${meetingId}/${action}?provider=${provider}`
+            : `${API}/meetings/${meetingId}/${action}`;
+          const res = await fetch(url, { method: 'POST' });
+          if (!res.ok) throw new Error((await res.json()).detail || 'Failed');
+          toast(action === 'transcribe' ? '轉錄已開始' : action === 'summarize' ? '摘要生成中' : '備份中...', 'success');
+        } catch (e) { toast(e.message, 'error'); }
+        setBusy('');
+      };
+
+      // Save title
+      const handleSaveTitle = async () => {
+        try {
+          await fetch(`${API}/meetings/${meetingId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: titleDraft }),
+          });
+          toast('標題已更新', 'success');
+          setEditingTitle(false);
+          load();
+        } catch (e) { toast('更新失敗', 'error'); }
+      };
+
+      if (loading) return <div style={{ textAlign: 'center', padding: 60 }}><div className="spinner spinner-lg" /></div>;
+      if (!m) return <p>Meeting not found</p>;
+
+      const isProcessing = ['transcribing', 'summarizing'].includes(m.status);
+
+      return (
+        <div>
+          <button className="btn btn-secondary btn-sm" onClick={goBack} style={{ marginBottom: 20 }}>
+            <i className="fas fa-arrow-left" /> 返回列表
+          </button>
+
+          <div className="card">
+            <div className="card-header">
+              <div style={{ flex: 1 }}>
+                {editingTitle ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input
+                      className="form-input"
+                      value={titleDraft}
+                      onChange={e => setTitleDraft(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleSaveTitle(); if (e.key === 'Escape') setEditingTitle(false); }}
+                      autoFocus
+                      style={{ fontSize: 20, fontWeight: 700, padding: '6px 12px', flex: 1 }}
+                    />
+                    <button className="btn btn-primary btn-sm" onClick={handleSaveTitle}><i className="fas fa-check" /></button>
+                    <button className="btn btn-secondary btn-sm" onClick={() => setEditingTitle(false)}><i className="fas fa-times" /></button>
+                  </div>
+                ) : (
+                  <h2 style={{ fontSize: 22, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
+                    onClick={() => { setTitleDraft(m.title); setEditingTitle(true); }}
+                    title="點擊編輯標題">
+                    {m.title} <i className="fas fa-pen" style={{ fontSize: 13, color: 'var(--text3)', opacity: 0.6 }} />
+                  </h2>
+                )}
+                <div style={{ color: 'var(--text3)', fontSize: 13, marginTop: 4, display: 'flex', gap: 16 }}>
+                  <span><i className="fas fa-calendar" /> {m.date}</span>
+                  <span><i className="fas fa-clock" /> {m.audio_duration_sec ? `${Math.floor(m.audio_duration_sec / 60)}分${Math.floor(m.audio_duration_sec % 60)}秒` : '-'}</span>
+                  <span><i className="fas fa-file-audio" /> {m.audio_filename}</span>
+                </div>
+                <div style={{ color: 'var(--accent)', fontSize: 12, marginTop: 4, opacity: 0.7 }}>
+                  <i className="fab fa-google-drive" /> Drive 檔名：{m.date}_{m.title}_*.ext
+                </div>
+                {m.participants && <div style={{ color: 'var(--text3)', fontSize: 13, marginTop: 4 }}><i className="fas fa-users" /> {m.participants}</div>}
+              </div>
+              <span className={`badge badge-${m.status}`}>
+                {isProcessing && <span className="spinner" />}
+                {m.status === 'uploaded' ? '已上傳' : m.status === 'transcribing' ? '轉錄中' : m.status === 'transcribed' ? '已轉錄' : m.status === 'summarizing' ? '摘要中' : m.status === 'completed' ? '已完成' : m.status}
+              </span>
+            </div>
+
+            {/* Action Buttons */}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={() => act('transcribe')}
+                disabled={isProcessing || busy === 'transcribe'}>
+                {busy === 'transcribe' ? <span className="spinner" /> : <i className="fas fa-microphone" />}
+                {m.transcript_text ? '重新轉錄' : '開始轉錄'}
+              </button>
+
+              {m.transcript_text && (
+                <>
+                  <div className="provider-selector" style={{ margin: 0, gap: 6 }}>
+                    {['openai', 'anthropic', 'gemini'].map(p => (
+                      <button key={p} className={`btn btn-sm ${provider === p ? 'btn-primary' : 'btn-secondary'}`}
+                        onClick={() => setProvider(p)}>
+                        {p === 'openai' ? 'ChatGPT' : p === 'anthropic' ? 'Claude' : 'Gemini'}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn btn-primary" onClick={() => act('summarize')}
+                    disabled={isProcessing || busy === 'summarize'}>
+                    {busy === 'summarize' ? <span className="spinner" /> : <i className="fas fa-brain" />}
+                    生成摘要
+                  </button>
+                </>
+              )}
+
+              <button className="btn btn-success" onClick={() => act('backup')}
+                disabled={busy === 'backup'}>
+                {busy === 'backup' ? <span className="spinner" /> : <i className="fab fa-google-drive" />}
+                備份至 Drive
+              </button>
+            </div>
+
+            {/* Transcription Progress Panel */}
+            {m.status === 'transcribing' && (
+              <TranscribeProgress meetingId={meetingId} toast={toast} />
+            )}
+          </div>
+
+          {m.error_message && (
+            <div className="card" style={{ borderColor: 'var(--red)' }}>
+              <h3 style={{ color: 'var(--red)', marginBottom: 8 }}><i className="fas fa-exclamation-triangle" /> 錯誤</h3>
+              <p style={{ fontSize: 14 }}>{m.error_message}</p>
+            </div>
+          )}
+
+          {/* Transcript */}
+          {m.transcript_text && (
+            <div className="card detail-section">
+              <h3><i className="fas fa-file-alt" /> 逐字稿
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text3)' }}>
+                  （語言：{m.transcript_language || 'auto'}
+                  {m.transcript_speakers && m.transcript_speakers.length > 0 && `，${m.transcript_speakers.length} 位說話者`}）
+                </span>
+              </h3>
+              {m.transcript_speakers && m.transcript_speakers.length > 0 && (
+                <div className="speaker-legend">
+                  {m.transcript_speakers.map((spk, i) => (
+                    <div key={spk} className="speaker-legend-item">
+                      <span className={`speaker-label speaker-${i % 6}`}>{spk}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="transcript-box">
+                {m.transcript_speakers && m.transcript_speakers.length > 0
+                  ? m.transcript_text.split('\n').map((line, i) => {
+                      const speakerMatch = line.match(/^\[(.+?)\]$/);
+                      if (speakerMatch) {
+                        const spk = speakerMatch[1];
+                        const idx = (m.transcript_speakers || []).indexOf(spk);
+                        return <div key={i}><span className={`speaker-label speaker-${(idx >= 0 ? idx : 0) % 6}`}>{spk}</span></div>;
+                      }
+                      return <div key={i}>{line}</div>;
+                    })
+                  : m.transcript_text
+                }
+              </div>
+            </div>
+          )}
+
+          {/* LLM Prompt Editor */}
+          {m.transcript_text && (
+            <div className="card detail-section">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}><i className="fas fa-magic" /> LLM 摘要 Prompt <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text3)' }}>（可自訂修改，複製時會包含此 Prompt）</span></h3>
+                <button className="btn btn-secondary btn-sm" onClick={() => setPrompt(DEFAULT_PROMPT)}>
+                  <i className="fas fa-undo" /> 還原預設
+                </button>
+              </div>
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                style={{
+                  width: '100%', minHeight: 200, padding: 16,
+                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
+                  color: 'var(--text)', fontSize: 13, lineHeight: 1.7, resize: 'vertical',
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+                <button className={`btn ${copied ? 'btn-success' : 'btn-primary'}`} onClick={handleCopyForLLM}>
+                  <i className={`fas ${copied ? 'fa-check' : 'fa-copy'}`} />
+                  {copied ? '已複製至剪貼簿！' : '複製 Prompt + 逐字稿到剪貼簿'}
+                </button>
+                <span style={{ color: 'var(--text3)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <i className="fas fa-info-circle" /> 複製後請貼至 ChatGPT / Claude / Gemini 網頁版產生摘要
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* External Summary Paste Area — shown after copy or if already has content */}
+          {m.transcript_text && (showExtPaste || extSummary || m.external_summary) && (
+            <div className="card detail-section" style={{ borderColor: 'var(--purple)', borderWidth: 1 }}>
+              <h3 style={{ marginBottom: 12 }}><i className="fas fa-paste" /> 外部 LLM 會議摘要
+                <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text3)' }}> — 將外部 LLM 產生的摘要貼在這裡</span>
+              </h3>
+              <textarea
+                placeholder="請將 ChatGPT / Claude / Gemini 產生的會議摘要貼在這裡..."
+                value={extSummary}
+                onChange={e => setExtSummary(e.target.value)}
+                style={{
+                  width: '100%', minHeight: 240, padding: 16,
+                  background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8,
+                  color: 'var(--text)', fontSize: 14, lineHeight: 1.8, resize: 'vertical',
+                  fontFamily: 'inherit', outline: 'none',
+                }}
+              />
+              <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <button className="btn btn-primary" onClick={handleSaveExtSummary} disabled={savingExt || !extSummary.trim()}>
+                  {savingExt ? <span className="spinner" /> : <i className="fas fa-save" />}
+                  儲存外部摘要
+                </button>
+                {m.external_summary && <span className="badge badge-completed"><i className="fas fa-check" /> 已儲存</span>}
+                <span style={{ color: 'var(--text3)', fontSize: 12, marginLeft: 'auto' }}>
+                  <i className="fas fa-cloud-upload-alt" /> 備份至 Drive 時將一併上傳此摘要
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* API-generated Summary */}
+          {m.summary_brief && (
+            <div className="card detail-section">
+              <h3><i className="fas fa-clipboard-list" /> API 會議摘要 <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text3)' }}>（由 {m.summary_llm_provider === 'openai' ? 'ChatGPT' : m.summary_llm_provider === 'anthropic' ? 'Claude' : 'Gemini'} API 產生）</span></h3>
+              <div className="summary-box">
+                <strong>摘要概述</strong>
+                <p style={{ marginTop: 8 }}>{m.summary_brief}</p>
+              </div>
+            </div>
+          )}
+
+          {m.summary_detailed && (
+            <div className="card detail-section">
+              <h3><i className="fas fa-book-open" /> 詳細摘要</h3>
+              <div className="summary-box" dangerouslySetInnerHTML={{ __html: m.summary_detailed.replace(/\n/g, '<br/>').replace(/^### (.+)$/gm, '<h4>$1</h4>').replace(/^## (.+)$/gm, '<h3>$1</h3>').replace(/^- (.+)$/gm, '<li>$1</li>') }} />
+            </div>
+          )}
+
+          {m.summary_action_items && (
+            <div className="card detail-section">
+              <h3><i className="fas fa-tasks" /> 待辦事項</h3>
+              <ul className="action-items">
+                {m.summary_action_items.split('\n').filter(Boolean).map((item, i) => (
+                  <li key={i}>{item.replace(/^[-•*]\s*/, '')}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // ─── Settings Page ─────────────────────────────────
+    function SettingsPage({ toast }) {
+      const [s, setS] = useState(null);
+      const [raw, setRaw] = useState(null);
+      const [saving, setSaving] = useState(false);
+      const [gd, setGd] = useState({ authorized: false, email: '' });
+      const [gdAuthing, setGdAuthing] = useState(false);
+      const [gdError, setGdError] = useState('');
+
+      useEffect(() => {
+        fetch(`${API}/settings`).then(r => r.json()).then(setS);
+        fetch(`${API}/settings/raw`).then(r => r.json()).then(setRaw);
+        fetch(`${API}/gdrive/status`).then(r => r.json()).then(setGd);
+      }, []);
+
+      const update = (key, val) => setRaw(prev => ({ ...prev, [key]: val }));
+
+      const save = async () => {
+        setSaving(true);
+        try {
+          await fetch(`${API}/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(raw) });
+          toast('設定已儲存', 'success');
+        } catch (e) { toast('儲存失敗', 'error'); }
+        setSaving(false);
+      };
+
+      if (!s || !raw) return <div style={{ textAlign: 'center', padding: 60 }}><div className="spinner spinner-lg" /></div>;
+
+      return (
+        <div>
+          <h2 className="page-title">設定</h2>
+          <p className="page-subtitle">API 金鑰與偏好設定</p>
+
+          {/* Whisper Settings */}
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 16 }}><i className="fas fa-microphone" /> Whisper 語音辨識設定</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">模型大小</label>
+                <select className="form-select" value={raw.whisper_model} onChange={e => update('whisper_model', e.target.value)}>
+                  <option value="small">small (~500MB, 快速)</option>
+                  <option value="medium">medium (~1.5GB, 平衡)</option>
+                  <option value="large-v3">large-v3 (~3GB, 最準確)</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">運算裝置</label>
+                <select className="form-select" value={raw.whisper_device} onChange={e => update('whisper_device', e.target.value)}>
+                  <option value="auto">自動偵測</option>
+                  <option value="cpu">CPU</option>
+                  <option value="cuda">CUDA (GPU)</option>
+                </select>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">語言</label>
+              <select className="form-select" value={raw.whisper_language} onChange={e => update('whisper_language', e.target.value)}>
+                <option value="auto">自動偵測</option>
+                <option value="zh">中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
+            <div className="form-group" style={{ marginTop: 16, padding: 16, background: 'var(--bg)', borderRadius: 8, border: '1px solid var(--border)' }}>
+              <label className="form-label" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+                <i className="fas fa-users" /> 說話者辨識 (Speaker Diarization)
+              </label>
+              <div className="form-group" style={{ marginBottom: 8 }}>
+                <label className="form-label">HuggingFace Token</label>
+                <input className="form-input" type="password" placeholder="hf_..." value={raw.hf_token || ''} onChange={e => update('hf_token', e.target.value)} />
+                <div className="form-hint">需要 HuggingFace token 才能啟用 pyannote 說話者辨識功能</div>
+              </div>
+              <div style={{ fontSize: 12, lineHeight: 1.7, color: 'var(--text3)' }}>
+                <strong>設定步驟：</strong><br/>
+                1. 前往 <a href="https://huggingface.co/settings/tokens" target="_blank" style={{ color: 'var(--accent)' }}>HuggingFace Tokens 頁面</a> 建立 Access Token<br/>
+                2. 前往 <a href="https://huggingface.co/pyannote/speaker-diarization-3.1" target="_blank" style={{ color: 'var(--accent)' }}>pyannote/speaker-diarization-3.1</a> 同意使用條款<br/>
+                3. 前往 <a href="https://huggingface.co/pyannote/segmentation-3.0" target="_blank" style={{ color: 'var(--accent)' }}>pyannote/segmentation-3.0</a> 同意使用條款<br/>
+                4. 將 Token 貼入上方欄位並儲存設定
+              </div>
+            </div>
+          </div>
+
+          {/* LLM Settings */}
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 16 }}><i className="fas fa-brain" /> LLM 摘要設定</div>
+            <div className="form-group">
+              <label className="form-label">預設 LLM 提供者</label>
+              <div className="provider-selector">
+                {[
+                  { id: 'openai', name: 'ChatGPT', icon: 'fa-robot', color: '#10a37f' },
+                  { id: 'anthropic', name: 'Claude', icon: 'fa-comment-dots', color: '#d4a574' },
+                  { id: 'gemini', name: 'Gemini', icon: 'fa-star', color: '#4285f4' },
+                ].map(p => (
+                  <div key={p.id} className={`provider-card ${raw.llm_provider === p.id ? 'selected' : ''}`}
+                    onClick={() => update('llm_provider', p.id)}>
+                    <i className={`fas ${p.icon}`} style={{ color: p.color }} />
+                    <div className="name">{p.name}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">OpenAI API Key</label>
+              <input className="form-input" type="password" placeholder="sk-..." value={raw.openai_api_key || ''} onChange={e => update('openai_api_key', e.target.value)} />
+              <div className="form-hint">模型：{raw.openai_model}</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Anthropic API Key</label>
+              <input className="form-input" type="password" placeholder="sk-ant-..." value={raw.anthropic_api_key || ''} onChange={e => update('anthropic_api_key', e.target.value)} />
+              <div className="form-hint">模型：{raw.anthropic_model}</div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Google Gemini API Key</label>
+              <input className="form-input" type="password" placeholder="AI..." value={raw.gemini_api_key || ''} onChange={e => update('gemini_api_key', e.target.value)} />
+              <div className="form-hint">模型：{raw.gemini_model}</div>
+            </div>
+          </div>
+
+          {/* Google Drive */}
+          <div className="card">
+            <div className="card-title" style={{ marginBottom: 16 }}><i className="fab fa-google-drive" /> Google Drive 備份</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span className={`badge ${gd.authorized ? 'badge-completed' : 'badge-error'}`}>
+                {gd.authorized ? `已連結: ${gd.email}` : '尚未授權'}
+              </span>
+              {!gd.authorized && (
+                <button className="btn btn-primary btn-sm" disabled={gdAuthing} onClick={async () => {
+                  setGdAuthing(true);
+                  setGdError('');
+                  try {
+                    const res = await fetch(`${API}/gdrive/authorize`, { method: 'POST' });
+                    const data = await res.json();
+                    if (data.success) {
+                      toast(`Google Drive 授權成功：${data.email}`, 'success');
+                      setGd({ authorized: true, email: data.email });
+                    } else {
+                      setGdError(data.error || '授權失敗');
+                      toast('Google Drive 授權失敗', 'error');
+                    }
+                  } catch (e) { setGdError(e.message); toast('授權失敗', 'error'); }
+                  setGdAuthing(false);
+                }}>
+                  {gdAuthing ? <><span className="spinner" /> 等待授權中...</> : <><i className="fab fa-google" /> 授權 Google Drive</>}
+                </button>
+              )}
+            </div>
+            {gdError && (
+              <div style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', borderRadius: 8, padding: 16, marginBottom: 16, whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.6 }}>
+                <strong style={{ color: 'var(--red)' }}><i className="fas fa-exclamation-triangle" /> 授權錯誤</strong>
+                <p style={{ marginTop: 8 }}>{gdError}</p>
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Drive 資料夾名稱</label>
+              <input className="form-input" value={raw.gdrive_folder_name || ''} onChange={e => update('gdrive_folder_name', e.target.value)} />
+            </div>
+            <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 8, padding: 16, fontSize: 13, lineHeight: 1.8, color: 'var(--text2)' }}>
+              <strong>設定步驟：</strong><br/>
+              1. 前往 <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style={{ color: 'var(--accent)' }}>Google Cloud Console 憑證頁面</a><br/>
+              2. 建立 OAuth 2.0 用戶端 ID，<strong style={{ color: 'var(--orange)' }}>應用程式類型選「桌面應用程式」(Desktop app)</strong><br/>
+              3. 下載 JSON 檔，重新命名為 <code>gdrive_credentials.json</code><br/>
+              4. 放入 MeetingMate 的 <code>data/</code> 目錄<br/>
+              5. 點擊上方「授權 Google Drive」按鈕
+            </div>
+          </div>
+
+          <button className="btn btn-primary" onClick={save} disabled={saving} style={{ marginTop: 8 }}>
+            {saving ? <span className="spinner" /> : <i className="fas fa-save" />}
+            儲存設定
+          </button>
+        </div>
+      );
+    }
+
+    // ─── App Root ──────────────────────────────────────
+    function App() {
+      const [page, setPage] = useState('upload');
+      const [detailId, setDetailId] = useState(null);
+      const [toastMsg, setToastMsg] = useState(null);
+
+      const toast = (message, type = 'success') => setToastMsg({ message, type });
+
+      const nav = [
+        { id: 'upload', icon: 'fa-cloud-upload-alt', label: '上傳音檔' },
+        { id: 'meetings', icon: 'fa-list', label: '會議記錄' },
+        { id: 'settings', icon: 'fa-cog', label: '設定' },
+      ];
+
+      return (
+        <div className="app">
+          <aside className="sidebar">
+            <div className="sidebar-header">
+              <h1><i className="fas fa-microphone-alt" /> <span>MeetingMate</span></h1>
+            </div>
+            <nav className="sidebar-nav">
+              {nav.map(n => (
+                <button key={n.id} className={`nav-btn ${page === n.id ? 'active' : ''}`}
+                  onClick={() => { setPage(n.id); setDetailId(null); }}>
+                  <i className={`fas ${n.icon}`} /> <span>{n.label}</span>
+                </button>
+              ))}
+            </nav>
+            <div style={{ padding: 16, borderTop: '1px solid var(--border)', color: 'var(--text3)', fontSize: 12 }}>
+              <span>MeetingMate v2.0</span><br/>
+              <span>WhisperX + Diarization + LLM</span>
+            </div>
+          </aside>
+
+          <main className="main">
+            {detailId
+              ? <DetailPage meetingId={detailId} toast={toast} goBack={() => { setDetailId(null); setPage('meetings'); }} />
+              : page === 'upload' ? <UploadPage onUpload={id => { setDetailId(id); setPage('meetings'); }} toast={toast} />
+              : page === 'meetings' ? <MeetingsPage onSelect={setDetailId} toast={toast} />
+              : <SettingsPage toast={toast} />
+            }
+          </main>
+
+          {toastMsg && <Toast message={toastMsg.message} type={toastMsg.type} onClose={() => setToastMsg(null)} />}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

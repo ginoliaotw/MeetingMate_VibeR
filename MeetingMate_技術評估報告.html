@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MeetingMate 技術評估報告</title>
+<style>
+  @media print { body { font-size: 11pt; } .page-break { page-break-before: always; } }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", Arial, sans-serif; color: #1a1a2e; line-height: 1.7; max-width: 900px; margin: 0 auto; padding: 40px 32px; background: #fff; }
+  h1 { font-size: 1.6em; color: #1a3a5c; margin: 40px 0 16px; padding-bottom: 8px; border-bottom: 3px solid #2e5b8a; }
+  h2 { font-size: 1.25em; color: #2e5b8a; margin: 28px 0 12px; }
+  h3 { font-size: 1.1em; color: #3d7ab5; margin: 20px 0 10px; }
+  p { margin-bottom: 12px; }
+  ul, ol { margin: 8px 0 16px 24px; }
+  li { margin-bottom: 6px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 24px; font-size: 0.92em; }
+  th { background: #2e5b8a; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+  td { padding: 10px 14px; border: 1px solid #ddd; vertical-align: top; }
+  tr:nth-child(even) td { background: #f7f9fc; }
+  .title-block { text-align: center; margin-bottom: 48px; padding-bottom: 24px; border-bottom: 4px solid #2e5b8a; }
+  .title-block h1 { font-size: 2.4em; border: none; margin: 0 0 8px; }
+  .title-block .subtitle { font-size: 1.3em; color: #2e5b8a; margin-bottom: 8px; }
+  .title-block .date { color: #888; }
+  .title-block .scope { color: #555; font-style: italic; margin-top: 12px; }
+  .highlight { background: #e8f0fe; border-left: 4px solid #2e5b8a; padding: 12px 16px; border-radius: 4px; margin: 16px 0; }
+  .warn { background: #fff3e0; border-left: 4px solid #f59e0b; padding: 12px 16px; border-radius: 4px; margin: 16px 0; }
+  .good { color: #006600; }
+  .bad { color: #cc0000; }
+  .bold { font-weight: 600; }
+  .phase { color: #2e5b8a; font-weight: 700; font-size: 1.05em; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<div class="title-block">
+  <h1 style="border:none">MeetingMate</h1>
+  <div class="subtitle">語音轉文字與即時翻譯技術評估報告</div>
+  <div class="date">2026年3月30日</div>
+  <div class="scope">需求：即時語音轉文字（含英譯中）+ 即時重點摘要 + 錄音檔會議記錄與翻譯</div>
+</div>
+
+<h1>一、評估背景與目標</h1>
+<p>MeetingMate 目前已實現離線錄音檔的語音轉文字（WhisperX + pyannote speaker diarization）、LLM 會議摘要、與 Google Drive 備份功能。現在希望擴展兩大功能：</p>
+<ul>
+  <li><strong>功能 A：即時語音轉文字（Real-time STT）</strong>——含英文即時翻譯成中文，以及即時重點摘要</li>
+  <li><strong>功能 B：錄音檔翻譯（Batch Translation）</strong>——將英文錄音檔轉錄後翻譯成中文</li>
+</ul>
+
+<h1>二、技術方案總覽</h1>
+
+<h2>2.1 Microsoft VibeVoice-ASR</h2>
+<p>2026年1月21日由微軟開源，是一個 <strong>9B 參數</strong>的統一語音辨識模型，可在單次推論中處理長達 60 分鐘的音訊。</p>
+
+<table>
+  <tr><th style="width:28%">特性</th><th>說明</th></tr>
+  <tr><td class="bold">模型大小</td><td>9B 參數，需 GPU（建議 24GB+ VRAM）</td></tr>
+  <tr><td class="bold">核心功能</td><td>ASR + Speaker Diarization + Timestamping <strong>三合一</strong><br>單次推論同時輸出「誰說的」「什麼時候」「說了什麼」</td></tr>
+  <tr><td class="bold">語言支援</td><td>50+ 語言，原生支援中英文 code-switching</td></tr>
+  <tr><td class="bold">中文表現</td><td>在 AISHELL-4、AliMeeting 等中文 benchmark 上測試，<span class="good">超越 Gemini-2.5-Pro</span></td></tr>
+  <tr><td class="bold">即時性</td><td><span class="bad">批次處理為主（Batch）</span>，非即時串流設計<br>可透過 vLLM 優化推論速度</td></tr>
+  <tr><td class="bold">Hotwords</td><td><span class="good">支援</span>自定義熱詞（人名、專有名詞）提升辨識率</td></tr>
+  <tr><td class="bold">翻譯功能</td><td><span class="bad">無內建翻譯</span>，需外掛 LLM 處理</td></tr>
+</table>
+
+<h2>2.2 WhisperX（目前 MeetingMate 使用）</h2>
+<p>WhisperX = faster-whisper + wav2vec2 alignment + pyannote diarization，是目前 MeetingMate 的轉錄引擎。</p>
+
+<table>
+  <tr><th style="width:28%">特性</th><th>說明</th></tr>
+  <tr><td class="bold">模型大小</td><td>large-v3 約 3GB，<span class="good">CPU 可運行（int8）</span></td></tr>
+  <tr><td class="bold">核心功能</td><td>ASR + 字級時間戳 + Speaker Diarization（三個模型串聯）<br>DER 約 8%，比單獨 pyannote 更低</td></tr>
+  <tr><td class="bold">語言支援</td><td>99 種語言（Whisper 原生支援）</td></tr>
+  <tr><td class="bold">即時性</td><td><span class="bad">批次處理（Batch only）</span>，不支援串流</td></tr>
+  <tr><td class="bold">翻譯功能</td><td>Whisper 內建 X→英文翻譯，但<span class="bad">不支援英→中文</span></td></tr>
+</table>
+
+<h2>2.3 其他即時串流方案</h2>
+<table>
+  <tr><th>方案</th><th>即時性</th><th>中文支援</th><th>備註</th></tr>
+  <tr><td>NVIDIA Parakeet</td><td>極快 (&gt;2000x RTF)</td><td>英文為主</td><td>GPU 必須，中文弱</td></tr>
+  <tr><td>Canary Qwen 2.5B</td><td>中等</td><td>支援</td><td>WER 5.63% 最低，但僅支援4語言</td></tr>
+  <tr><td>Vosk / Kaldi</td><td><span class="good">即時串流</span></td><td>支援</td><td>傳統方案，精確度較低</td></tr>
+  <tr><td>Azure Speech SDK</td><td><span class="good">即時串流</span></td><td><span class="good">優秀</span></td><td>雲端付費服務，非離線</td></tr>
+</table>
+
+<div class="page-break"></div>
+
+<h1>三、關鍵比較：VibeVoice-ASR vs WhisperX</h1>
+<table>
+  <tr><th style="width:22%">比較項目</th><th style="width:39%">VibeVoice-ASR</th><th style="width:39%">WhisperX（現用）</th></tr>
+  <tr><td class="bold">架構</td><td>單一模型三合一<br>(ASR+Diarization+Timestamp)</td><td>三模型串聯<br>(faster-whisper+wav2vec2+pyannote)</td></tr>
+  <tr><td class="bold">參數量</td><td>9B（大）</td><td>~3B（組合）</td></tr>
+  <tr><td class="bold">硬體需求</td><td><span class="bad">24GB+ GPU VRAM</span></td><td><span class="good">CPU 可運行 (int8)，GPU 可加速</span></td></tr>
+  <tr><td class="bold">Diarization</td><td><span class="good">內建，單次推論</span></td><td>需額外 pyannote + HF token</td></tr>
+  <tr><td class="bold">中文精確度</td><td><span class="good">極高（超越 Gemini-2.5-Pro）</span></td><td>高（large-v3）</td></tr>
+  <tr><td class="bold">即時串流</td><td><span class="bad">不支援（Batch only）</span></td><td><span class="bad">不支援（Batch only）</span></td></tr>
+  <tr><td class="bold">英→中翻譯</td><td>無內建</td><td>無內建（僅 X→英文）</td></tr>
+  <tr><td class="bold">部署難度</td><td>高（需 vLLM + GPU）</td><td><span class="good">低（pip install）</span></td></tr>
+  <tr><td class="bold">Hotwords</td><td><span class="good">支援</span></td><td>不支援</td></tr>
+</table>
+
+<div class="highlight">
+  <strong>關鍵發現：</strong>VibeVoice-ASR 和 WhisperX 都<strong>不是</strong>即時串流引擎。兩者都是批次處理模型。即時語音轉文字需要不同的技術方案。此外，兩者都沒有內建英→中翻譯功能，翻譯需要外掛 LLM。
+</div>
+
+<h1>四、建議架構設計</h1>
+<p>根據需求分析，建議將 MeetingMate 擴展為「雙引擎」架構：</p>
+
+<h2>4.1 功能 A：即時語音轉文字 + 即時翻譯 + 即時重點</h2>
+<div class="warn">
+  <strong>注意：</strong>VibeVoice-ASR 與 WhisperX 都不支援即時串流，即時功能需要不同的技術組合。
+</div>
+
+<table>
+  <tr><th style="width:22%">層</th><th>建議方案</th></tr>
+  <tr>
+    <td class="bold">即時 STT</td>
+    <td>
+      <strong>方案 A：Azure Speech SDK</strong>（雲端，中英文最佳，付費）<br>
+      <strong>方案 B：faster-whisper streaming mode</strong>（離線，將音訊切割成小塊遞增轉錄）<br>
+      <strong>方案 C：Vosk</strong>（離線即時，精確度較低但延遲極低）
+    </td>
+  </tr>
+  <tr>
+    <td class="bold">即時英→中翻譯</td>
+    <td>
+      LLM API 即時翻譯（Streaming）：<br>
+      每當累積一句完整的英文，透過 GPT-4o / Claude / Gemini API 即時翻譯成中文，以 SSE 推送到前端
+    </td>
+  </tr>
+  <tr>
+    <td class="bold">即時重點摘要</td>
+    <td>
+      LLM 滾動摘要：<br>
+      每 2–3 分鐘將累積的轉錄內容傳給 LLM，產生「即時重點」顯示在側欄<br>
+      會議結束後再用完整轉錄稿產生正式摘要
+    </td>
+  </tr>
+</table>
+
+<h2>4.2 功能 B：錄音檔會議記錄 + 翻譯（已有基礎）</h2>
+<table>
+  <tr><th style="width:22%">層</th><th>建議方案</th></tr>
+  <tr><td class="bold">離線 STT</td><td>現有 WhisperX（維持）<br>可選擇升級為 VibeVoice-ASR（若有 GPU）</td></tr>
+  <tr><td class="bold">說話者辨識</td><td>WhisperX + pyannote（現有）<br>VibeVoice-ASR 內建（更精確）</td></tr>
+  <tr>
+    <td class="bold">英→中翻譯</td>
+    <td>
+      <strong>新增功能：</strong>轉錄完成後，用 LLM 將英文轉錄稿翻譯成中文<br>
+      可作為「翻譯」按鈕加在會議詳細頁
+    </td>
+  </tr>
+  <tr><td class="bold">會議摘要</td><td>現有 LLM 摘要功能（維持）</td></tr>
+</table>
+
+<h1>五、實作優先級建議</h1>
+<p>根據技術複雜度、實用性和成本考量，建議以下實作順序：</p>
+
+<p class="phase">Phase 1：錄音檔翻譯功能（最簡單，1–2 天）</p>
+<ol>
+  <li>在現有會議詳細頁新增「翻譯」按鈕，轉錄完成後可將英文轉錄稿透過 LLM 翻譯成中文</li>
+  <li>使用現有 LLM API（GPT-4o / Claude / Gemini），無需新引擎</li>
+  <li>難度低，只需新增一個 API endpoint + 前端按鈕</li>
+</ol>
+
+<p class="phase">Phase 2：即時語音轉文字（中等難度，3–5 天）</p>
+<ol>
+  <li>新增「即時轉錄」頁面，透過瀏覽器麥克風擷取音訊</li>
+  <li>建議採用 faster-whisper 切塊遞增轉錄（每 5 秒處理一次）——離線可用、免費</li>
+  <li>或採用 Azure Speech SDK（雲端）——中英文混合最佳，但需付費</li>
+</ol>
+
+<p class="phase">Phase 3：即時英→中翻譯 + 即時重點（較高難度，3–5 天）</p>
+<ol>
+  <li>即時轉錄的英文字幕透過 LLM Streaming API 即時翻譯成中文</li>
+  <li>每 2–3 分鐘用 LLM 產生即時重點，顯示在側欄</li>
+  <li>需要 WebSocket / SSE 實現前後端即時通訊</li>
+</ol>
+
+<p class="phase">Phase 4（選配）：升級為 VibeVoice-ASR</p>
+<ol>
+  <li>若未來有 GPU 伺服器，可將離線轉錄引擎升級為 VibeVoice-ASR</li>
+  <li>優勢：更高的中文精確度、內建 diarization、支援 hotwords</li>
+  <li>前提：需要 24GB+ GPU VRAM（如 RTX 4090 或雲端 GPU）</li>
+</ol>
+
+<h1>六、成本評估</h1>
+<table>
+  <tr><th>項目</th><th>離線方案</th><th>雲端方案</th><th>說明</th></tr>
+  <tr><td class="bold">即時 STT</td><td><span class="good">免費</span><br>(faster-whisper)</td><td>~$1/小時<br>(Azure Speech)</td><td>離線精確度稍低<br>雲端中英文混合最佳</td></tr>
+  <tr><td class="bold">即時翻譯</td><td>N/A</td><td>~$0.01/每次<br>(LLM API)</td><td>每句調用一次 LLM</td></tr>
+  <tr><td class="bold">即時重點</td><td>N/A</td><td>~$0.02/每次<br>(LLM API)</td><td>每 2-3 分鐘調用一次</td></tr>
+  <tr><td class="bold">錄音檔翻譯</td><td colspan="2">~$0.03/次 (LLM API)</td><td>全文翻譯單次調用</td></tr>
+  <tr><td class="bold">VibeVoice-ASR</td><td><span class="good">免費</span><br>（需 GPU）</td><td>~$0.5/小時<br>（雲端 GPU）</td><td>需 24GB+ VRAM</td></tr>
+</table>
+
+<h1>七、結論</h1>
+<p><strong>VibeVoice-ASR</strong> 是目前最強的開源語音辨識模型，但它<strong>並非即時串流引擎</strong>，而是批次處理模型，且硬體需求高（24GB+ GPU）。它沒有內建翻譯功能。</p>
+
+<p>對於 MeetingMate 的即時需求，最務實的做法是：</p>
+<ul>
+  <li><strong>離線轉錄：</strong>繼續使用 WhisperX（已有），CPU 可運行，夠用</li>
+  <li><strong>即時轉錄：</strong>用 faster-whisper 切塊遞增 或 Azure Speech SDK</li>
+  <li><strong>英→中翻譯：</strong>統一用 LLM API 處理（即時和離線都適用）</li>
+  <li><strong>即時重點：</strong>LLM 滾動摘要（每 2–3 分鐘更新一次）</li>
+  <li><strong>VibeVoice-ASR：</strong>留待未來有 GPU 時再升級，作為 Phase 4 選配</li>
+</ul>
+
+<div class="highlight">
+  <strong>建議從 Phase 1（錄音檔翻譯）開始實作</strong>，這是最快能看到效果的功能，且技術難度最低。
+</div>
+
+</body>
+</html>
