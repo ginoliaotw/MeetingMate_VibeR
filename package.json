@@ -1,0 +1,61 @@
+{
+  "name": "meetingmate",
+  "productName": "MeetingMate",
+  "version": "1.0.0",
+  "description": "離線會議記錄 App — WhisperX + LLM 摘要",
+  "main": "electron/main.js",
+  "author": "ginoliaotw",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --mac",
+    "build:dmg": "electron-builder --mac dmg",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "build": {
+    "appId": "com.ginoliaotw.meetingmate",
+    "productName": "MeetingMate",
+    "copyright": "Copyright © 2026 ginoliaotw",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "backend/**/*",
+      "!backend/__pycache__",
+      "!**/*.pyc"
+    ],
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": ["**/*", "!__pycache__", "!*.pyc"]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "electron/assets/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "electron/entitlements.mac.plist",
+      "entitlementsInherit": "electron/entitlements.mac.plist",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ]
+    },
+    "dmg": {
+      "title": "MeetingMate 安裝",
+      "backgroundColor": "#1e1e2e",
+      "window": { "width": 540, "height": 380 }
+    },
+    "nsisWeb": {
+      "oneClick": false
+    }
+  }
+}

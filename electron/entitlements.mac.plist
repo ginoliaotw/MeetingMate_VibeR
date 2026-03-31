@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 允許執行 JIT（Electron 必需） -->
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+  <!-- 允許執行未簽名的可執行碼（PyInstaller 後端） -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <!-- 麥克風存取（語音錄製） -->
+  <key>com.apple.security.device.microphone</key>
+  <true/>
+  <!-- 檔案系統存取（音檔上傳） -->
+  <key>com.apple.security.files.user-selected.read-write</key>
+  <true/>
+  <!-- 網路（LLM API、Google Drive） -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+</dict>
+</plist>

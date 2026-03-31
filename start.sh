@@ -1,63 +1,55 @@
-#!/bin/bash
-# MeetingMate — Quick Start Script
-# Usage: ./start.sh
+#!/usr/bin/env bash
+# MeetingMate — 啟動腳本
+# 開發模式：直接執行此腳本
+# 正式打包：npm run build  →  release/ 目錄下的 .dmg / .app
 
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BACKEND_DIR="$SCRIPT_DIR/backend"
-DATA_DIR="$SCRIPT_DIR/data"
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+BACKEND_DIR="$ROOT/backend"
+DATA_DIR="$ROOT/data"
 
 echo "🎙️  MeetingMate — 離線會議記錄翻譯 App"
 echo "========================================="
-echo ""
 
-# Create data directories
+# 建立資料目錄
 mkdir -p "$DATA_DIR"/{uploads,transcripts,summaries}
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 not found. Please install Python 3.10+."
-    exit 1
+# 確認 Python
+if ! command -v python3 &>/dev/null; then
+  echo "❌ 找不到 Python 3，請安裝 Python 3.10+"; exit 1
 fi
 
-# Check ffmpeg (required by Whisper)
-if ! command -v ffmpeg &> /dev/null; then
-    echo "⚠️  ffmpeg not found. Installing..."
-    if command -v brew &> /dev/null; then
-        brew install ffmpeg
-    elif command -v apt-get &> /dev/null; then
-        sudo apt-get install -y ffmpeg
-    else
-        echo "❌ Please install ffmpeg manually: https://ffmpeg.org/download.html"
-        exit 1
-    fi
+# 確認 ffmpeg
+if ! command -v ffmpeg &>/dev/null; then
+  echo "⚠️  安裝 ffmpeg..."
+  brew install ffmpeg 2>/dev/null || { echo "❌ 請手動安裝 ffmpeg"; exit 1; }
 fi
 
-# Create venv if needed
-VENV_DIR="$SCRIPT_DIR/.venv"
+# Python 虛擬環境
+VENV_DIR="$ROOT/.venv"
 if [ ! -d "$VENV_DIR" ]; then
-    echo "📦 Creating Python virtual environment..."
-    python3 -m venv "$VENV_DIR"
+  echo "📦 建立 Python 虛擬環境..."
+  python3 -m venv "$VENV_DIR"
 fi
-
 source "$VENV_DIR/bin/activate"
 
-# Upgrade pip + setuptools first (fixes pkg_resources / build wheel errors)
-echo "📦 Upgrading pip & setuptools..."
+echo "📦 確認 Python 套件..."
 pip install -q --upgrade pip setuptools wheel
-
-# Install deps
-echo "📦 Installing dependencies..."
 pip install -q -r "$BACKEND_DIR/requirements.txt"
 
+# Node / Electron
+if ! command -v node &>/dev/null; then
+  echo "❌ 找不到 Node.js，請安裝 Node.js 18+"; exit 1
+fi
+
+if [ ! -d "$ROOT/node_modules" ]; then
+  echo "📦 安裝 Electron 依賴..."
+  cd "$ROOT" && npm install
+fi
+
 echo ""
-echo "🚀 Starting MeetingMate server at http://localhost:8000"
-echo "   Frontend: http://localhost:8000"
-echo "   API docs: http://localhost:8000/docs"
-echo ""
-echo "   Press Ctrl+C to stop."
+echo "🚀 以 Electron 桌面模式啟動 MeetingMate..."
+echo "   （如需純後端模式，請改用：uvicorn main:app --port 8000）"
 echo ""
 
-cd "$BACKEND_DIR"
-python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+cd "$ROOT" && npx electron .
